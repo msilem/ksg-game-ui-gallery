@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Screenshot Gallery</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; color: #333; overflow-x: hidden; }
+        .header { flex-direction: column; gap: 10px; align-items: stretch; margin-bottom: 20px; background: white; padding: 14px 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 100; }
+        .header-row1 { display: flex; justify-content: space-between; align-items: center; }
+        .header-row1 h1 { margin: 0; font-size: 1.3em; }
+        .header-actions { display: flex; gap: 8px; align-items: center; }
+        .header-row2 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .query-bar { display: flex; align-items: center; gap: 8px; flex: 1; flex-wrap: wrap; }
+        .query-bar input[type="text"] { padding: 6px 12px; border: 1px solid #ccc; border-radius: 20px; font-size: 0.9em; min-width: 180px; outline: none; }
+        .query-bar input[type="text"]:focus { border-color: #1a73e8; }
+        .filter-pills { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+        .pill { background: #f1f3f4; border: 1px solid #ddd; color: #5f6368; padding: 4px 12px; border-radius: 16px; cursor: pointer; font-size: 0.82em; font-weight: 500; transition: background 0.15s, color 0.15s, border-color 0.15s; white-space: nowrap; }
+        .pill:hover { background: #e8eaed; border-color: #bbb; color: #333; }
+        .pill.active { background: #1a73e8; color: white; border-color: #1a73e8; }
+        .pill[data-filter="onlyIgnored"].active { background: #d93025; border-color: #d93025; }
+        .pill-clear { background: none; border: none; color: #888; font-size: 0.82em; cursor: pointer; padding: 3px 6px; }
+        .pill-clear:hover { color: #d93025; }
+        .filter-status { font-size: 0.82em; color: #1a73e8; font-weight: 600; white-space: nowrap; margin-left: 4px; }
+        .more-menu { position: relative; }
+        .more-menu > summary { list-style: none; cursor: pointer; }
+        .more-menu > summary::-webkit-details-marker { display: none; }
+        .more-menu-content { position: absolute; right: 0; top: calc(100% + 6px); background: white; border: 1px solid #e0e0e0; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); min-width: 175px; z-index: 300; overflow: hidden; }
+        .menu-item { display: flex; align-items: center; width: 100%; padding: 10px 16px; box-sizing: border-box; text-align: left; border: none; background: none; cursor: pointer; font-size: 0.88em; color: #333; font-family: inherit; }
+        .menu-item:hover { background: #f1f3f4; }
+        .menu-item.danger { color: #d93025; }
+        .menu-divider { margin: 4px 0; border: none; border-top: 1px solid #eee; }
+        .empty-state { display: none; text-align: center; padding: 60px 20px; color: #5f6368; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .empty-state-icon { font-size: 2.4em; margin-bottom: 12px; }
+        .empty-state-msg { font-size: 1.05em; margin-bottom: 18px; }
+        .header-row2 select { padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9em; }
+        .stats { background: white; padding: 14px 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+        .stat { font-size: 0.9em; }
+        .stat .v { font-size: 1.4em; font-weight: bold; color: #1a73e8; display: block; }
+        .stat.clickable { cursor: pointer; transition: background 0.15s; border-radius: 6px; padding: 4px 6px; margin: -4px -6px; }
+        .stat.clickable:hover { background: #e8f0fe; }
+
+        .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 20px; }
+        .gallery.compact { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+        .card { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; flex-direction: column; align-items: center; transition: box-shadow 0.15s; position: relative; }
+        .card.ignored { opacity: 0.55; }
+        .card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.14); }
+        .card.starred-card { border-top: 4px solid #00c853; }
+
+        /* Compact card variant */
+        .gallery.compact .card { padding: 8px; }
+        .gallery.compact .input-grid,
+        .gallery.compact .checkbox-group,
+        .gallery.compact .ui-band-overlay-toggle { display: none !important; }
+        .gallery.compact .compact-summary { display: block; }
+        .compact-summary { display: none; width: 100%; font-size: 0.78em; line-height: 1.3; margin-top: 6px; color: #333; }
+        .compact-summary .row { display: flex; justify-content: space-between; gap: 4px; }
+        .compact-summary .name { font-weight: 600; color: #1a73e8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .compact-summary .badges { font-size: 0.9em; }
+        .compact-summary .badge { display: inline-block; padding: 0 4px; border-radius: 3px; margin-left: 2px; color: white; font-size: 0.85em; }
+        .compact-summary .badge.bb { background: #d93025; }
+        .compact-summary .badge.fb { background: #f9ab00; }
+        .compact-summary .badge.sb { background: #f9ab00; font-size: 0.9em; }
+        .gallery.compact .img-wrap img { max-height: 220px; }
+
+        .img-wrap { position: relative; display: inline-block; margin-bottom: 10px; user-select: none; }
+        .img-wrap img { display: block; max-width: 100%; height: auto; border-radius: 4px; border: 1px solid #ddd; max-height: 552px; }
+        .measure-canvas { position: absolute; left: 0; top: 0; cursor: crosshair; }
+        .ui-band { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(217,48,37,0.18); border-top: 2px dashed #d93025; pointer-events: none; display: none; }
+        .ui-band-label { position: absolute; right: 4px; top: 2px; background: #d93025; color: white; font-size: 11px; font-weight: bold; padding: 1px 6px; border-radius: 3px; }
+        .img-wrap.show-band .ui-band { display: block; }
+
+        .ui-band-overlay-toggle { font-size: 0.8em; margin: 4px 0 8px; }
+        .btn-revert { background: transparent; border: 1px solid #ccc; color: #5f6368; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8em; }
+        .btn-revert:hover { background: #f1f3f4; color: #1a73e8; border-color: #1a73e8; }
+
+        .star-overlay { position: absolute; top: 6px; right: 8px; background: rgba(0,0,0,0.55); border: none; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 1.1em; line-height: 1; cursor: pointer; color: rgba(255,255,255,0.90); transition: background 0.15s, color 0.15s, transform 0.1s; z-index: 10; }
+        .star-overlay:hover { background: rgba(0,0,0,0.75); color: white; transform: scale(1.15); }
+        .star-overlay.starred { background: rgba(0,200,83,0.95); color: white; }
+        .comment-area { width: 100%; box-sizing: border-box; padding: 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.85em; resize: vertical; min-height: 54px; font-family: inherit; color: #333; }
+        .comment-area:focus { outline: none; border-color: #1a73e8; }
+        .gallery.compact .comment-wrap { display: none !important; }
+
+        .info { width: 100%; }
+        .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .input-group { display: flex; flex-direction: column; margin-top: 10px; }
+        .input-group.full { grid-column: span 2; }
+        .input-group label { font-size: 0.85em; margin-bottom: 3px; color: #555; font-weight: 600; }
+        .input-group input[type="text"], .input-group input[type="number"] { padding: 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9em; }
+        .checkbox-group { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 0.9em; }
+        .checkbox-group input { width: 16px; height: 16px; cursor: pointer; }
+
+        .px-readout { display: inline-block; min-width: 56px; text-align: center; padding: 3px 6px; border-radius: 4px; background: #e8f5e9; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.85em; color: #2e7d32; font-weight: bold; }
+        .px-readout.empty { color: #999; background: #fafafa; }
+
+        .btn { background: #1a73e8; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 0.95em; }
+        .btn:hover { background: #1557b0; }
+        .btn.secondary { background: #5f6368; }
+        .btn.secondary:hover { background: #3c4043; }
+        .btn.toggle.active { background: #188038; }
+        .reelestate-val { font-weight: bold; color: #d93025; }
+        .ui-pct-val { font-weight: bold; color: #188038; }
+        .hide { display: none !important; }
+
+        /* Comparison drawer */
+        .comparison { background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; padding: 14px 20px; display: none; overflow: auto; }
+        .comparison.open { display: block; }
+        .comparison h2 { margin: 0 0 10px; font-size: 1.1em; }
+        .compare-table { width: 100%; border-collapse: collapse; font-size: 0.88em; }
+        .compare-table th, .compare-table td { padding: 6px 8px; border-bottom: 1px solid #eee; text-align: left; white-space: nowrap; }
+        .compare-table th { background: #f8f9fa; cursor: pointer; user-select: none; position: sticky; top: 0; }
+        .compare-table th:hover { background: #e8eaed; }
+        .compare-table th .arrow { font-size: 0.75em; margin-left: 4px; opacity: 0.5; }
+        .compare-table th.sorted .arrow { opacity: 1; color: #1a73e8; }
+        .compare-table td.num { text-align: right; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+        .compare-table tr.ignored { opacity: 0.45; }
+        .compare-table .yes { color: #188038; font-weight: bold; }
+        .compare-table .no { color: #999; }
+        .compare-table .bar { display: inline-block; height: 10px; background: linear-gradient(90deg, #1a73e8, #4285f4); border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+        .compare-table .bar.red { background: linear-gradient(90deg, #d93025, #ea4335); }
+        .compare-table .bar.green { background: linear-gradient(90deg, #188038, #34a853); }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-row1">
+            <h1>Game Screenshot Gallery <span style="font-size:0.65em;font-weight:400;color:#888;">iPhone 8 — 552 px</span></h1>
+            <div class="header-actions">
+                <button class="btn toggle" id="compactBtn" onclick="toggleCompact()">Compact</button>
+                <button class="btn toggle" id="compareBtn" onclick="toggleCompare()">Comparison</button>
+                <button class="btn" onclick="exportToCSV()">Export CSV</button>
+                <details class="more-menu">
+                    <summary class="btn secondary">⋮ More</summary>
+                    <div class="more-menu-content">
+                        <label class="menu-item">Import CSV<input type="file" id="csvFile" accept=".csv" style="display:none" onchange="importCSV(event)"></label>
+                        <button class="menu-item" onclick="exportJSON(); this.closest('details').removeAttribute('open')">Backup JSON</button>
+                        <label class="menu-item">Restore JSON<input type="file" id="jsonFile" accept=".json" style="display:none" onchange="importJSON(event)"></label>
+                        <hr class="menu-divider">
+                        <button class="menu-item danger" onclick="clearAll()">Reset all data…</button>
+                    </div>
+                </details>
+            </div>
+        </div>
+        <div class="header-row2">
+            <div class="query-bar">
+                <input type="text" id="filterText" placeholder="Search provider / game…" oninput="applyFilters()">
+                <div class="filter-pills">
+                    <button class="pill" data-filter="hideIgnored" onclick="togglePill(this)">Hide ignored</button>
+                    <button class="pill" data-filter="onlyIgnored" onclick="togglePill(this)">Only ignored</button>
+                    <button class="pill" data-filter="hasBuyBonus" onclick="togglePill(this)">Buy Bonus</button>
+                    <button class="pill" data-filter="hasFeatureBet" onclick="togglePill(this)">Bet+/Ante</button>
+                    <button class="pill" data-filter="onlyStarred" onclick="togglePill(this)">★ Starred</button>
+                    <button class="pill" data-filter="unmeasured" onclick="togglePill(this)">Unmeasured</button>
+                    <button class="pill-clear" id="clearFiltersBtn" style="display:none" onclick="clearFilters()">× Clear</button>
+                    <span class="filter-status" id="filterStatus" style="display:none"></span>
+                </div>
+            </div>
+            <select id="sortBy" onchange="applyFilters()">
+                <option value="default">Sort: default</option>
+                <option value="provider">Provider A–Z</option>
+                <option value="reel-asc">Reel-estate ↑</option>
+                <option value="reel-desc">Reel-estate ↓</option>
+                <option value="spin-desc">Spin btn ↓</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="comparison" id="comparison">
+        <h2>Comparison — click any column header to sort</h2>
+        <div style="overflow:auto; max-height:380px;">
+            <table class="compare-table" id="compareTable"></table>
+        </div>
+    </div>
+
+    <div class="empty-state" id="emptyState">
+        <div class="empty-state-icon">🔍</div>
+        <div class="empty-state-msg">No games match your filters</div>
+        <button class="btn" onclick="clearFilters()">Clear filters</button>
+    </div>
+    <div class="gallery" id="gallery"></div>
+
+    <script>
+        // ----- File list (iPhone 8 only) -----
+        const files = [
+            "1x2network_iphone8-portrait-min_375x552.png",
+            "agtonline_iphone8-portrait-min_375x552.png",
+            "betsoftgaming_iphone8-portrait-min_375x552.png",
+            "blueprintgaming_iphone8-portrait-min_375x552.png",
+            "booming-games_iphone8-portrait-min_375x552.png",
+            "box-int-54f2g_iphone8-portrait-min_375x552.png",
+            "casinocontroller_iphone8-portrait-min_375x552.png",
+            "cdn-pf_iphone8-portrait-min_375x552.png",
+            "cherryjackpot_iphone8-portrait-min_375x552.png",
+            "cloudfront_iphone8-portrait-min_375x552.png",
+            "co_iphone8-portrait-min_375x552.png",
+            "eajzzxhro_iphone8-portrait-min_375x552.png",
+            "fazi_iphone8-portrait-min_375x552.png",
+            "gamesglobal_iphone8-portrait-min_375x552.png",
+            "gamingrealms_iphone8-portrait-min_375x552.png",
+            "gpifungames_iphone8-portrait-min_375x552.png",
+            "hacksawgaming_iphone8-portrait-min_375x552.png",
+            "high5games_iphone8-portrait-min_375x552.png",
+            "inspiredvirgo_iphone8-portrait-min_375x552.png",
+            "insvr_iphone8-portrait-min_375x552.png",
+            "kalambagames_iphone8-portrait-min_375x552.png",
+            "leandergames_iphone8-portrait-min_375x552.png",
+            "mancalagroup_iphone8-portrait-min_375x552.png",
+            "mobilots_iphone8-portrait-min_375x552.png",
+            "nyxmalta_iphone8-portrait-min_375x552.png",
+            "nyxop_iphone8-portrait-min_375x552.png",
+            "pariplaygames_iphone8-portrait-min_375x552.png",
+            "platipusgaming_iphone8-portrait-min_375x552.png",
+            "playtechone_iphone8-portrait-min_375x552.png",
+            "playzido_iphone8-portrait-min_375x552.png",
+            "pragmaticplay_iphone8-portrait-min_375x552.png",
+            "pushgaming_iphone8-portrait-min_375x552.png",
+            "redrakegaming_iphone8-portrait-min_375x552.png",
+            "roxor_iphone8-portrait-min_375x552.png",
+            "saucify_iphone8-portrait-min_375x552.png",
+            "sgplayfun_iphone8-portrait-min_375x552.png",
+            "spinmatic_iphone8-portrait-min_375x552.png",
+            "spinomenal_iphone8-portrait-min_375x552.png",
+            "ss211208_iphone8-portrait-min_375x552.png",
+            "sw420101_iphone8-portrait-min_375x552.png",
+            "syngamtech_iphone8-portrait-min_375x552.png",
+            "thunderkick_iphone8-portrait-min_375x552.png",
+            "wi-gameserver_iphone8-portrait-min_375x552.png",
+            "Screenshot_20260427-144035.png",
+            "Screenshot_20260427-144330.png",
+            "Screenshot_20260427-144420.png",
+            "Screenshot_20260427-144625.png",
+            "Screenshot_20260427-144838.png",
+            "Screenshot_20260427-145006.png",
+            "Screenshot_20260427-145103.png",
+            "Screenshot_20260427-145153.png",
+            "Screenshot_20260427-145313.png",
+            "Screenshot_20260427-145621.png",
+            "Screenshot_20260427-145803.png",
+            "Screenshot_20260427-150102.png"
+        ];
+
+        // ----- AI-seeded default measurements (from a prior visual pass over each iPhone-8 screenshot) -----
+        // Keyed by filename. Used only when localStorage has no value for that field+index.
+        // Edit any field in the card to override; user edits always win.
+        const SEEDS = {
+            "1x2network_iphone8-portrait-min_375x552.png":      { game:"3 Hot Chilli Peppers Extra", spin:50, side:38, ui:135, fb:false, bb:false },
+            "agtonline_iphone8-portrait-min_375x552.png":       { game:"Eagle Reset", spin:58, side:42, ui:120, fb:false, bb:false },
+            "betsoftgaming_iphone8-portrait-min_375x552.png":   { game:"Plinko-style", spin:52, side:32, ui:115, fb:false, bb:false },
+            "blueprintgaming_iphone8-portrait-min_375x552.png": { game:"Eye of Horus Golden Tablet", spin:64, side:28, ui:145, fb:false, bb:false },
+            "booming-games_iphone8-portrait-min_375x552.png":   { game:"Ultra Buffalo Hold and Win", spin:52, side:36, ui:115, fb:true,  bb:false },
+            "box-int-54f2g_iphone8-portrait-min_375x552.png":   { game:"Coin Strike XXL Hold and Win", spin:52, side:36, ui:120, fb:false, bb:true  },
+            "casinocontroller_iphone8-portrait-min_375x552.png":{ game:"Diamond Temple", spin:50, side:40, ui:95,  fb:false, bb:false },
+            "cdn-pf_iphone8-portrait-min_375x552.png":          { game:"O'Reilly's Riches", spin:46, side:30, ui:100, fb:false, bb:false },
+            "cherryjackpot_iphone8-portrait-min_375x552.png":   { game:"Bass Baggin'", spin:46, side:32, ui:110, fb:false, bb:false },
+            "cloudfront_iphone8-portrait-min_375x552.png":      { game:"Christmas Megapots", spin:46, side:38, ui:110, fb:false, bb:false },
+            "co_iphone8-portrait-min_375x552.png":              { game:"El Dorado Totems", spin:58, side:36, ui:95,  fb:false, bb:false },
+            "eajzzxhro_iphone8-portrait-min_375x552.png":       { game:"Framed Symbols", spin:58, side:32, ui:115, fb:false, bb:false },
+            "fazi_iphone8-portrait-min_375x552.png":            { game:"Golden Explosion", spin:56, side:52, ui:140, fb:false, bb:false },
+            "gamesglobal_iphone8-portrait-min_375x552.png":     { game:"Mega Eagle Power Combo", spin:62, side:40, ui:100, fb:false, bb:false },
+            "gamingrealms_iphone8-portrait-min_375x552.png":    { game:"Bingo Genie", spin:58, side:46, ui:115, fb:false, bb:false },
+            "gpifungames_iphone8-portrait-min_375x552.png":     { game:"Lucky Cats", spin:52, side:30, ui:110, fb:false, bb:false },
+            "hacksawgaming_iphone8-portrait-min_375x552.png":   { game:"Mighty Atlantis", spin:62, side:30, ui:100, fb:false, bb:false },
+            "high5games_iphone8-portrait-min_375x552.png":      { game:"5 Heroes", spin:58, side:30, ui:115, fb:true,  bb:false },
+            "inspiredvirgo_iphone8-portrait-min_375x552.png":   { game:"Jaguar Gems Bonus Spin", spin:60, side:36, ui:120, fb:false, bb:true  },
+            "insvr_iphone8-portrait-min_375x552.png":           { game:"Haunted Harbor Jackpot Race", spin:58, side:50, ui:150, fb:true,  bb:true  },
+            "kalambagames_iphone8-portrait-min_375x552.png":    { game:"Electro Blast 7s", spin:62, side:36, ui:135, fb:false, bb:true  },
+            "leandergames_iphone8-portrait-min_375x552.png":    { game:"Moonlight Wolves Bonus Rush", spin:58, side:42, ui:115, fb:false, bb:false },
+            "mancalagroup_iphone8-portrait-min_375x552.png":    { game:"Mad Wolf Hold and Win", spin:60, side:38, ui:110, fb:false, bb:false },
+            "mobilots_iphone8-portrait-min_375x552.png":        { game:"Outlaws", spin:60, side:36, ui:140, fb:false, bb:false },
+            "nyxmalta_iphone8-portrait-min_375x552.png":        { game:"Rise of the Mountain King", spin:70, side:32, ui:115, fb:false, bb:true  },
+            "nyxop_iphone8-portrait-min_375x552.png":           { game:"Tiki Tiki Trio Da-Max", spin:52, side:36, ui:115, fb:false, bb:true  },
+            "pariplaygames_iphone8-portrait-min_375x552.png":   { game:"Burn Burn Burn Stepper", spin:36, side:30, ui:85,  fb:false, bb:false },
+            "platipusgaming_iphone8-portrait-min_375x552.png":  { game:"Platipus Slot", spin:36, side:24, ui:70,  fb:false, bb:false },
+            "playtechone_iphone8-portrait-min_375x552.png":     { game:"Sol Mistico", spin:62, side:52, ui:130, fb:false, bb:true  },
+            "playzido_iphone8-portrait-min_375x552.png":        { game:"Bruce Lee Kung Fu Wilds", spin:50, side:32, ui:115, fb:false, bb:true  },
+            "pragmaticplay_iphone8-portrait-min_375x552.png":   { game:"Pragmatic Slot", spin:58, side:38, ui:135, fb:true,  bb:true  },
+            "pushgaming_iphone8-portrait-min_375x552.png":      { game:"Push Gaming Slot", spin:70, side:30, ui:85,  fb:false, bb:false },
+            "redrakegaming_iphone8-portrait-min_375x552.png":   { game:"Guardians of Luxor 4", spin:50, side:30, ui:120, fb:false, bb:false },
+            "roxor_iphone8-portrait-min_375x552.png":           { game:"Howling Treasures Gold Rush", spin:38, side:32, ui:85,  fb:false, bb:false },
+            "saucify_iphone8-portrait-min_375x552.png":         { game:"Return of Ra", spin:52, side:32, ui:95,  fb:false, bb:false },
+            "sgplayfun_iphone8-portrait-min_375x552.png":       { game:"Good Day", spin:50, side:36, ui:125, fb:false, bb:true  },
+            "spinmatic_iphone8-portrait-min_375x552.png":       { game:"Jelly Teddy", spin:50, side:36, ui:110, fb:false, bb:false },
+            "spinomenal_iphone8-portrait-min_375x552.png":      { game:"Reign of Seth", spin:62, side:50, ui:110, fb:false, bb:false },
+            "ss211208_iphone8-portrait-min_375x552.png":        { game:"Building / Press Spin", spin:58, side:36, ui:125, fb:false, bb:true  },
+            "sw420101_iphone8-portrait-min_375x552.png":        { game:"Crows N Trees Megaways", spin:58, side:36, ui:115, fb:false, bb:false },
+            "syngamtech_iphone8-portrait-min_375x552.png":      { game:"100 Stunning Dice", spin:88, side:50, ui:225, fb:false, bb:false },
+            "thunderkick_iphone8-portrait-min_375x552.png":     { game:"Thunderkick Slot", spin:54, side:38, ui:135, fb:true,  bb:true  },
+            "wi-gameserver_iphone8-portrait-min_375x552.png":   { game:"Rainbow Riches Pots of Gold", spin:32, side:26, ui:50,  fb:false, bb:false },
+            "Screenshot_20260427-144035.png": { game:"Dead or Alive II – Wanted (Relax)", spin:70, side:50, ui:165, fb:false, bb:false },
+            "Screenshot_20260427-144330.png": { game:"Vikings Go To Vegas (Yggdrasil)",   spin:75, side:50, ui:145, fb:false, bb:true  },
+            "Screenshot_20260427-144420.png": { game:"Frankenstein Wild Surge",           spin:75, side:55, ui:125, fb:false, bb:false },
+            "Screenshot_20260427-144625.png": { game:"Iron Bank 2 (Relax)",               spin:70, side:55, ui:180, fb:true,  bb:true  },
+            "Screenshot_20260427-144838.png": { game:"Punk Rocker 3",                     spin:75, side:58, ui:155, fb:true,  bb:false },
+            "Screenshot_20260427-145006.png": { game:"Shark Boss",                        spin:72, side:60, ui:130, fb:false, bb:true  },
+            "Screenshot_20260427-145103.png": { game:"Aztec Tribute",                     spin:72, side:60, ui:135, fb:false, bb:true  },
+            "Screenshot_20260427-145153.png": { game:"Brawler's Brew (Quickspin)",        spin:70, side:50, ui:130, fb:true,  bb:true  },
+            "Screenshot_20260427-145313.png": { game:"Honeylock's Pots (Quickspin)",      spin:70, side:50, ui:135, fb:true,  bb:true  },
+            "Screenshot_20260427-145621.png": { game:"Huff N Puff Collectr",              spin:85, side:60, ui:115, fb:false, bb:true  },
+            "Screenshot_20260427-145803.png": { game:"Coin Strike XXL (Playson)",         spin:75, side:50, ui:165, fb:false, bb:true  },
+            "Screenshot_20260427-150102.png": { game:"Magic Fruits Oranges (Wazdan)",     spin:88, side:55, ui:205, fb:true,  bb:false }
+        };
+
+        const SCREEN_HEIGHT = 552;
+        const FIELDS = ['provider','game','spinSize','sideSize','bottomUiHeight','featureBet','buyBonus','ignore','showBand','starred','comment'];
+        const SEED_MAP = { spinSize:'spin', sideSize:'side', bottomUiHeight:'ui', game:'game', featureBet:'fb', buyBonus:'bb' };
+
+        const gallery = document.getElementById('gallery');
+
+        function get(field, index) { return localStorage.getItem(`${field}-${index}`); }
+        function set(field, index, value) { localStorage.setItem(`${field}-${index}`, value); }
+
+        // Returns localStorage value if set, else seed default for that file/field, else null
+        function seeded(field, index, fallback='') {
+            const v = get(field, index);
+            // Empty string is treated as unset so seed defaults are restored
+            if (v !== null && v !== undefined && v !== '') return v;
+            const seed = SEEDS[files[index]];
+            if (!seed) return fallback;
+            const k = SEED_MAP[field];
+            if (k && seed[k] !== undefined) return String(seed[k]);
+            return fallback;
+        }
+        function seededBool(field, index) {
+            const v = get(field, index);
+            if (v === 'true' || v === 'false') return v === 'true';
+            const seed = SEEDS[files[index]];
+            const k = SEED_MAP[field];
+            return !!(seed && k && seed[k]);
+        }
+        // Setter that clears the key when value is empty, so empty fields
+        // fall back to the seed default instead of locking in a blank value.
+        function setOrClear(field, index, value) {
+            if (value === '' || value === null || value === undefined) {
+                localStorage.removeItem(`${field}-${index}`);
+            } else {
+                set(field, index, value);
+            }
+        }
+
+        // ---------- Stars / favourites ----------
+        function starredOn(index) { return get('starred', index) === 'true'; }
+        function toggleStar(index) {
+            const on = !starredOn(index);
+            const card = document.querySelector(`.card[data-index="${index}"]`);
+            set('starred', index, on);
+            if (card) card.classList.toggle('starred-card', on);
+            const btn = document.getElementById(`star-${index}`);
+            if (btn) btn.classList.toggle('starred', on);
+            const csStarEl = document.getElementById(`cs-star-${index}`);
+            if (csStarEl) csStarEl.style.display = on ? '' : 'none';
+            updateStats();
+            if (document.getElementById('comparison').classList.contains('open')) renderCompare();
+        }
+
+        // UI-band visibility — default ON for every image. Only stored when the
+        // user explicitly turns it off (or back on after turning it off).
+        function bandOn(index) {
+            return get('showBand', index) !== 'false';
+        }
+        function setBand(index, on) {
+            set('showBand', index, on ? 'true' : 'false');
+            const wrap = document.getElementById(`wrap-${index}`);
+            if (wrap) wrap.classList.toggle('show-band', on);
+            updateBand(index);
+        }
+        function revertCard(index) {
+            FIELDS.forEach(f => localStorage.removeItem(`${f}-${index}`));
+            // Re-populate inputs from seeds
+            const file = files[index];
+            const providerMatch = file.match(/^([^_]+)/);
+            const defaultProvider = file.startsWith('Screenshot_') ? 'Self Made' : (providerMatch ? providerMatch[1] : 'Unknown');
+            document.getElementById(`provider-${index}`).value = seeded('provider', index, defaultProvider);
+            document.getElementById(`game-${index}`).value = seeded('game', index, '');
+            document.getElementById(`spinSize-${index}`).value = seeded('spinSize', index, '');
+            document.getElementById(`sideSize-${index}`).value = seeded('sideSize', index, '');
+            document.getElementById(`bottomUiHeight-${index}`).value = seeded('bottomUiHeight', index, '');
+            document.getElementById(`featureBet-${index}`).checked = seededBool('featureBet', index);
+            document.getElementById(`buyBonus-${index}`).checked = seededBool('buyBonus', index);
+            document.getElementById(`ignore-${index}`).checked = seededBool('ignore', index);
+            document.querySelector(`.card[data-index="${index}"]`).classList.toggle('ignored', seededBool('ignore', index));
+            // Restore UI-band visibility to its default (ON)
+            const bandCb = document.getElementById(`band-${index}`);
+            if (bandCb) bandCb.checked = true;
+            const wrap = document.getElementById(`wrap-${index}`);
+            if (wrap) wrap.classList.add('show-band');
+            // Reset star and comment
+            const starBtn = document.getElementById(`star-${index}`);
+            if (starBtn) starBtn.classList.remove('starred');
+            const csStarEl = document.getElementById(`cs-star-${index}`);
+            if (csStarEl) csStarEl.style.display = 'none';
+            const commentEl = document.getElementById(`comment-${index}`);
+            if (commentEl) commentEl.value = '';
+            recalc(index);
+        }
+
+        function recalc(index) {
+            const h = parseFloat(document.getElementById(`bottomUiHeight-${index}`).value) || 0;
+            const uiPct = h ? ((h / SCREEN_HEIGHT) * 100) : 0;
+            const reelPct = h ? (100 - uiPct) : 0;
+            document.getElementById(`uiPct-${index}`).textContent = uiPct ? uiPct.toFixed(1) + '%' : '—';
+            document.getElementById(`reelEstatePct-${index}`).textContent = reelPct ? reelPct.toFixed(1) + '%' : '—';
+            // px readouts
+            document.getElementById(`spinPxRO-${index}`).textContent = (document.getElementById(`spinSize-${index}`).value || '—') + (document.getElementById(`spinSize-${index}`).value ? ' px' : '');
+            document.getElementById(`sidePxRO-${index}`).textContent = (document.getElementById(`sideSize-${index}`).value || '—') + (document.getElementById(`sideSize-${index}`).value ? ' px' : '');
+            document.getElementById(`uiPxRO-${index}`).textContent = (h || '—') + (h ? ' px' : '');
+            document.getElementById(`spinPxRO-${index}`).classList.toggle('empty', !document.getElementById(`spinSize-${index}`).value);
+            document.getElementById(`sidePxRO-${index}`).classList.toggle('empty', !document.getElementById(`sideSize-${index}`).value);
+            document.getElementById(`uiPxRO-${index}`).classList.toggle('empty', !h);
+            // UI band overlay
+            updateBand(index);
+            // compact summary
+            const cs = document.getElementById(`compact-${index}`);
+            if (cs) {
+                cs.querySelector('.cs-spin').textContent = document.getElementById(`spinSize-${index}`).value || '—';
+                cs.querySelector('.cs-ui').textContent = h ? `${h}px (${uiPct.toFixed(0)}%)` : '—';
+            }
+            updateStats();
+            if (document.getElementById('comparison').classList.contains('open')) renderCompare();
+        }
+
+        function updateBand(index) {
+            const wrap = document.getElementById(`wrap-${index}`);
+            if (!wrap) return;
+            const band = wrap.querySelector('.ui-band');
+            const img = document.getElementById(`img-${index}`);
+            const h = parseFloat(document.getElementById(`bottomUiHeight-${index}`).value) || 0;
+            if (!h || !img.naturalHeight) { band.style.height = '0px'; band.querySelector('.ui-band-label').textContent = ''; return; }
+            const r = img.getBoundingClientRect();
+            const scale = r.height / img.naturalHeight;
+            band.style.height = (h * scale) + 'px';
+            band.querySelector('.ui-band-label').textContent = `${h}px UI`;
+        }
+
+        // ---------- Passive ruler overlay ----------
+        // Drag on any image to see the pixel size of the rectangle.
+        // Result is NEVER saved and NEVER auto-fills any field — display only.
+        // Releases on mouseup, fades out shortly after.
+        const measureState = {};
+
+        function attachMeasure(index) {
+            const img = document.getElementById(`img-${index}`);
+            const canvas = document.getElementById(`measure-${index}`);
+            const sync = () => {
+                const r = img.getBoundingClientRect();
+                canvas.width = r.width;
+                canvas.height = r.height;
+                canvas.style.width = r.width + 'px';
+                canvas.style.height = r.height + 'px';
+                const st = measureState[index] = measureState[index] || {};
+                st.scale = (img.naturalHeight && r.height) ? (img.naturalHeight / r.height) : 1;
+                redrawMeasure(index);
+                updateBand(index);
+            };
+            if (img.complete) sync(); else img.addEventListener('load', sync);
+            window.addEventListener('resize', sync);
+
+            // Use pointer events + setPointerCapture so the drag survives the cursor
+            // leaving the canvas. We deliberately do NOT end the drag on pointerleave
+            // — only on pointerup / pointercancel — so the rectangle never vanishes
+            // mid-drag.
+            const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+            canvas.addEventListener('pointerdown', (e) => {
+                const st = measureState[index] = measureState[index] || {};
+                const r = canvas.getBoundingClientRect();
+                st.drawing = true;
+                if (st.fadeTimer) { clearTimeout(st.fadeTimer); st.fadeTimer = null; }
+                st.sx = e.clientX - r.left; st.sy = e.clientY - r.top;
+                st.ex = st.sx; st.ey = st.sy;
+                try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+                e.preventDefault();
+                redrawMeasure(index);
+            });
+            canvas.addEventListener('pointermove', (e) => {
+                const st = measureState[index]; if (!st || !st.drawing) return;
+                const r = canvas.getBoundingClientRect();
+                // Clamp so the rectangle stays inside the image even if the
+                // cursor strays beyond it during the drag.
+                st.ex = clamp(e.clientX - r.left, 0, canvas.width);
+                st.ey = clamp(e.clientY - r.top,  0, canvas.height);
+                redrawMeasure(index);
+            });
+            const finish = (e) => {
+                const st = measureState[index]; if (!st || !st.drawing) return;
+                st.drawing = false;
+                if (e && e.pointerId != null) {
+                    try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+                }
+                // The rectangle stays visible briefly so the px readout can be read,
+                // then fades. Nothing is written anywhere.
+                if (st.fadeTimer) clearTimeout(st.fadeTimer);
+                st.fadeTimer = setTimeout(() => { st.sx = null; redrawMeasure(index); }, 2500);
+            };
+            canvas.addEventListener('pointerup', finish);
+            canvas.addEventListener('pointercancel', finish);
+        }
+        function redrawMeasure(index) {
+            const canvas = document.getElementById(`measure-${index}`);
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0,0,canvas.width,canvas.height);
+            const st = measureState[index];
+            if (!st || st.sx == null) return;
+            const x = Math.min(st.sx, st.ex), y = Math.min(st.sy, st.ey);
+            const w = Math.abs(st.ex - st.sx), h = Math.abs(st.ey - st.sy);
+            ctx.strokeStyle = '#d93025'; ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, w, h);
+            ctx.fillStyle = 'rgba(217,48,37,0.15)';
+            ctx.fillRect(x, y, w, h);
+            const wReal = Math.round(w * st.scale);
+            const hReal = Math.round(h * st.scale);
+            // High-contrast label with white background pill
+            const text = `${wReal} × ${hReal} px`;
+            ctx.font = 'bold 13px ui-monospace, "SF Mono", Menlo, monospace';
+            const tw = ctx.measureText(text).width;
+            const lx = Math.min(x + 4, canvas.width - tw - 10);
+            const ly = Math.max(y + 4, 4);
+            ctx.fillStyle = 'rgba(255,255,255,0.92)';
+            ctx.fillRect(lx, ly, tw + 8, 18);
+            ctx.strokeStyle = '#d93025'; ctx.lineWidth = 1;
+            ctx.strokeRect(lx, ly, tw + 8, 18);
+            ctx.fillStyle = '#d93025';
+            ctx.fillText(text, lx + 4, ly + 13);
+        }
+
+        // ---------- Cards ----------
+        files.forEach((file, index) => {
+            const providerMatch = file.match(/^([^_]+)/);
+            const defaultProvider = file.startsWith('Screenshot_') ? 'Self Made' : (providerMatch ? providerMatch[1] : 'Unknown');
+            const imgSrc = file;
+
+            const savedProvider = seeded('provider', index, defaultProvider);
+            const savedGame = seeded('game', index, '');
+            const savedIgnore = seededBool('ignore', index);
+            const savedSpinSize = seeded('spinSize', index, '');
+            const savedSideSize = seeded('sideSize', index, '');
+            const savedUiHeight = seeded('bottomUiHeight', index, '');
+            const savedFeatureBet = seededBool('featureBet', index);
+            const savedBuyBonus = seededBool('buyBonus', index);
+
+            const uiPct = savedUiHeight ? ((parseFloat(savedUiHeight) / SCREEN_HEIGHT) * 100).toFixed(1) + '%' : '—';
+            const reelPct = savedUiHeight ? (100 - (parseFloat(savedUiHeight) / SCREEN_HEIGHT) * 100).toFixed(1) + '%' : '—';
+
+            const card = document.createElement('div');
+            card.className = 'card' + (savedIgnore ? ' ignored' : '') + (starredOn(index) ? ' starred-card' : '');
+            card.dataset.index = index;
+            card.dataset.file = file;
+
+            card.innerHTML = `
+                <div class="ui-band-overlay-toggle">
+                    <label><input type="checkbox" id="band-${index}" ${bandOn(index) ? 'checked' : ''} onchange="setBand(${index}, this.checked)"> Show UI band on image</label>
+                </div>
+                <button type="button" class="star-overlay ${starredOn(index) ? 'starred' : ''}" id="star-${index}" title="Toggle favourite" onclick="toggleStar(${index})">★</button>
+                <div class="img-wrap ${bandOn(index) ? 'show-band' : ''}" id="wrap-${index}">
+                    <img id="img-${index}" src="${imgSrc}" alt="${defaultProvider} screenshot" loading="lazy">
+                    <canvas id="measure-${index}" class="measure-canvas"></canvas>
+                    <div class="ui-band"><div class="ui-band-label"></div></div>
+                </div>
+                <div class="compact-summary" id="compact-${index}">
+                    <div class="row"><span class="name">${savedProvider}${savedGame ? ' · ' + savedGame : ''}</span></div>
+                    <div class="row">
+                        <span>spin <span class="cs-spin">${savedSpinSize || '—'}</span> · ui <span class="cs-ui">${savedUiHeight ? savedUiHeight + 'px (' + ((parseFloat(savedUiHeight)/SCREEN_HEIGHT)*100).toFixed(0) + '%)' : '—'}</span></span>
+                        <span class="badges">
+                            ${savedBuyBonus ? '<span class="badge bb">BB</span>' : ''}
+                            ${savedFeatureBet ? '<span class="badge fb">FB</span>' : ''}
+                            <span id="cs-star-${index}" class="badge sb" style="${starredOn(index) ? '' : 'display:none'}">★</span>
+                        </span>
+                    </div>
+                </div>
+                <div class="info">
+                    <div class="input-grid">
+                        <div class="input-group">
+                            <label for="provider-${index}">Provider:</label>
+                            <input type="text" id="provider-${index}" value="${savedProvider}" oninput="setOrClear('provider', ${index}, this.value); document.querySelector('#compact-${index} .name').textContent = this.value + (document.getElementById('game-${index}').value ? ' · ' + document.getElementById('game-${index}').value : ''); updateStats(); if (document.getElementById('comparison').classList.contains('open')) renderCompare();">
+                        </div>
+                        <div class="input-group">
+                            <label for="game-${index}">Game Name:</label>
+                            <input type="text" id="game-${index}" value="${savedGame.replace(/"/g,'&quot;')}" placeholder="Game Title" oninput="setOrClear('game', ${index}, this.value); document.querySelector('#compact-${index} .name').textContent = document.getElementById('provider-${index}').value + (this.value ? ' · ' + this.value : ''); if (document.getElementById('comparison').classList.contains('open')) renderCompare();">
+                        </div>
+                        <div class="input-group">
+                            <label for="spinSize-${index}">Spin Btn (px): <span id="spinPxRO-${index}" class="px-readout ${savedSpinSize ? '' : 'empty'}">${savedSpinSize ? savedSpinSize + ' px' : '—'}</span></label>
+                            <input type="number" id="spinSize-${index}" value="${savedSpinSize}" placeholder="e.g. 80" oninput="setOrClear('spinSize', ${index}, this.value); recalc(${index})">
+                        </div>
+                        <div class="input-group">
+                            <label for="sideSize-${index}">Side Btns (px): <span id="sidePxRO-${index}" class="px-readout ${savedSideSize ? '' : 'empty'}">${savedSideSize ? savedSideSize + ' px' : '—'}</span></label>
+                            <input type="number" id="sideSize-${index}" value="${savedSideSize}" placeholder="e.g. 40" oninput="setOrClear('sideSize', ${index}, this.value); recalc(${index})">
+                        </div>
+                        <div class="input-group">
+                            <label for="bottomUiHeight-${index}">Bottom UI (px): <span id="uiPxRO-${index}" class="px-readout ${savedUiHeight ? '' : 'empty'}">${savedUiHeight ? savedUiHeight + ' px' : '—'}</span></label>
+                            <input type="number" id="bottomUiHeight-${index}" value="${savedUiHeight}" placeholder="e.g. 120" oninput="setOrClear('bottomUiHeight', ${index}, this.value); recalc(${index})">
+                        </div>
+                        <div class="input-group">
+                            <label>UI % / Reel %:</label>
+                            <div style="margin-top: 8px; font-size: 0.95em;">
+                                <span id="uiPct-${index}" class="reelestate-val">${uiPct}</span>
+                                <span style="color:#888"> / </span>
+                                <span id="reelEstatePct-${index}" class="ui-pct-val">${reelPct}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="input-grid" style="margin-top: 10px;">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="featureBet-${index}" ${savedFeatureBet ? 'checked' : ''} onchange="set('featureBet', ${index}, this.checked); recalc(${index})">
+                            <label for="featureBet-${index}">Bet+/Boost/Ante</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="buyBonus-${index}" ${savedBuyBonus ? 'checked' : ''} onchange="set('buyBonus', ${index}, this.checked); recalc(${index})">
+                            <label for="buyBonus-${index}">Buy Bonus</label>
+                        </div>
+                    </div>
+
+                    <div class="checkbox-group" style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #eee; justify-content: space-between;">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <input type="checkbox" id="ignore-${index}" ${savedIgnore ? 'checked' : ''} onchange="set('ignore', ${index}, this.checked); document.querySelector('.card[data-index=&quot;${index}&quot;]').classList.toggle('ignored', this.checked); applyFilters()">
+                            <label for="ignore-${index}" style="color: #888; font-size:0.85em;">Skip this game</label>
+                        </div>
+                        <button type="button" class="btn-revert" title="Discard your edits for this card and restore the seeded defaults" onclick="revertCard(${index})">↺ Revert to seed</button>
+                    </div>
+                    <div class="comment-wrap" style="width:100%; margin-top:10px; padding-top:10px; border-top:1px solid #f0f0f0;">
+                        <textarea id="comment-${index}" class="comment-area" placeholder="Notes…" oninput="setOrClear('comment', ${index}, this.value)">${escapeHtml(get('comment', index) || '')}</textarea>
+                    </div>
+                </div>
+            `;
+            gallery.appendChild(card);
+            attachMeasure(index);
+        });
+
+        // ---------- View toggles ----------
+        function toggleCompact() {
+            gallery.classList.toggle('compact');
+            document.getElementById('compactBtn').classList.toggle('active', gallery.classList.contains('compact'));
+            // resync band overlays after layout change
+            files.forEach((_, i) => updateBand(i));
+        }
+
+        // ---------- Comparison view ----------
+        const COMPARE_COLS = [
+            { key: 'provider', label: 'Provider' },
+            { key: 'game', label: 'Game' },
+            { key: 'spin', label: 'Spin px', num: true },
+            { key: 'side', label: 'Side px', num: true },
+            { key: 'ui', label: 'UI px', num: true },
+            { key: 'uiPct', label: 'UI %', num: true },
+            { key: 'reelPct', label: 'Reel %', num: true },
+            { key: 'fb', label: 'Bet+' },
+            { key: 'bb', label: 'BuyBonus' },
+            { key: 'ignore', label: 'Ignore' },
+            { key: 'starred', label: '★' }
+        ];
+        let compareSort = { key: 'provider', dir: 1 };
+
+        function rowData(index) {
+            const file = files[index];
+            const provider = document.getElementById(`provider-${index}`).value;
+            const game = document.getElementById(`game-${index}`).value;
+            const spin = parseFloat(document.getElementById(`spinSize-${index}`).value) || 0;
+            const side = parseFloat(document.getElementById(`sideSize-${index}`).value) || 0;
+            const ui = parseFloat(document.getElementById(`bottomUiHeight-${index}`).value) || 0;
+            const uiPct = ui ? +(ui / SCREEN_HEIGHT * 100).toFixed(1) : 0;
+            const reelPct = ui ? +(100 - uiPct).toFixed(1) : 0;
+            const fb = document.getElementById(`featureBet-${index}`).checked;
+            const bb = document.getElementById(`buyBonus-${index}`).checked;
+            const ignore = document.getElementById(`ignore-${index}`).checked;
+            const starred = get('starred', index) === 'true';
+            const comment = get('comment', index) || '';
+            return { index, file, provider, game, spin, side, ui, uiPct, reelPct, fb, bb, ignore, starred, comment };
+        }
+
+        function renderCompare() {
+            const rows = files.map((_, i) => rowData(i));
+            // Bar widths normalized to max
+            const max = (k) => Math.max(1, ...rows.map(r => r[k] || 0));
+            const ms = max('spin'), msd = max('side'), mu = max('ui');
+            // Sort
+            const dir = compareSort.dir;
+            rows.sort((a, b) => {
+                let av = a[compareSort.key], bv = b[compareSort.key];
+                if (typeof av === 'boolean') { av = av ? 1 : 0; bv = bv ? 1 : 0; }
+                if (typeof av === 'string') return dir * av.localeCompare(bv);
+                return dir * ((av || 0) - (bv || 0));
+            });
+            const table = document.getElementById('compareTable');
+            const head = '<thead><tr>' + COMPARE_COLS.map(c => {
+                const isSorted = compareSort.key === c.key;
+                const arrow = isSorted ? (compareSort.dir > 0 ? '▲' : '▼') : '↕';
+                return `<th class="${isSorted ? 'sorted' : ''}" onclick="sortCompare('${c.key}')">${c.label}<span class="arrow">${arrow}</span></th>`;
+            }).join('') + '</tr></thead>';
+            const body = '<tbody>' + rows.map(r => {
+                const bar = (val, mx, cls='') => `<span class="bar ${cls}" style="width:${(val/mx)*60}px"></span>`;
+                return `<tr class="${r.ignore ? 'ignored' : ''}">
+                    <td><a href="javascript:void(0)" style="color:inherit;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'" onclick="scrollToCard(${r.index})" title="Jump to card">${escapeHtml(r.provider)}</a></td>
+                    <td>${escapeHtml(r.game)}</td>
+                    <td class="num">${r.spin ? bar(r.spin, ms) + r.spin : '—'}</td>
+                    <td class="num">${r.side ? bar(r.side, msd) + r.side : '—'}</td>
+                    <td class="num">${r.ui ? bar(r.ui, mu, 'red') + r.ui : '—'}</td>
+                    <td class="num">${r.uiPct ? r.uiPct + '%' : '—'}</td>
+                    <td class="num">${r.reelPct ? r.reelPct + '%' : '—'}</td>
+                    <td>${r.fb ? '<span class="yes">✓</span>' : '<span class="no">·</span>'}</td>
+                    <td>${r.bb ? '<span class="yes">✓</span>' : '<span class="no">·</span>'}</td>
+                    <td>${r.ignore ? '<span class="yes">✓</span>' : '<span class="no">·</span>'}</td>
+                    <td>${r.starred ? '<span class="yes">★</span>' : '<span class="no">·</span>'}</td>
+                </tr>`;
+            }).join('') + '</tbody>';
+            table.innerHTML = head + body;
+        }
+        function sortCompare(key) {
+            if (compareSort.key === key) compareSort.dir *= -1;
+            else { compareSort = { key, dir: 1 }; }
+            renderCompare();
+        }
+        function scrollToCard(index) {
+            document.getElementById('comparison').classList.remove('open');
+            document.getElementById('compareBtn').classList.remove('active');
+            const card = document.querySelector(`.card[data-index="${index}"]`);
+            if (!card) return;
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            card.style.outline = '3px solid #1a73e8';
+            card.style.outlineOffset = '2px';
+            setTimeout(() => { card.style.outline = ''; card.style.outlineOffset = ''; }, 1600);
+        }
+        function toggleCompare() {
+            const el = document.getElementById('comparison');
+            el.classList.toggle('open');
+            document.getElementById('compareBtn').classList.toggle('active', el.classList.contains('open'));
+            if (el.classList.contains('open')) renderCompare();
+        }
+        function escapeHtml(s) { return String(s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+        // ---------- Filter / sort ----------
+        function activateFilterPill(filter) {
+            const pill = document.querySelector(`.pill[data-filter="${filter}"]`);
+            if (!pill) return;
+            if (!pill.classList.contains('active')) { pill.classList.add('active'); applyFilters(); }
+        }
+        function togglePill(el) {
+            const filter = el.dataset.filter;
+            const wasActive = el.classList.contains('active');
+            if (filter === 'hideIgnored' || filter === 'onlyIgnored') {
+                document.querySelectorAll('.pill[data-filter="hideIgnored"], .pill[data-filter="onlyIgnored"]').forEach(p => p.classList.remove('active'));
+            }
+            el.classList.toggle('active', !wasActive);
+            applyFilters();
+        }
+        function clearFilters() {
+            document.getElementById('filterText').value = '';
+            document.querySelectorAll('.pill.active').forEach(p => p.classList.remove('active'));
+            applyFilters();
+        }
+        function applyFilters() {
+            const q = document.getElementById('filterText').value.trim().toLowerCase();
+            const sortBy = document.getElementById('sortBy').value;
+            const activePills = new Set([...document.querySelectorAll('.pill.active')].map(p => p.dataset.filter));
+            localStorage.setItem('ksg_active_pills', JSON.stringify([...activePills]));
+            localStorage.setItem('ksg_filter_text', q);
+            const cards = Array.from(document.querySelectorAll('.card'));
+            let visibleCount = 0;
+            cards.forEach(card => {
+                const i = card.dataset.index;
+                const provider = (document.getElementById(`provider-${i}`).value || '').toLowerCase();
+                const game = (document.getElementById(`game-${i}`).value || '').toLowerCase();
+                const ignore = document.getElementById(`ignore-${i}`).checked;
+                const buyBonus = document.getElementById(`buyBonus-${i}`).checked;
+                const featureBet = document.getElementById(`featureBet-${i}`).checked;
+                const ui = document.getElementById(`bottomUiHeight-${i}`).value;
+                let show = true;
+                if (q && !provider.includes(q) && !game.includes(q)) show = false;
+                if (activePills.has('hideIgnored') && ignore) show = false;
+                if (activePills.has('onlyIgnored') && !ignore) show = false;
+                if (activePills.has('hasBuyBonus') && !buyBonus) show = false;
+                if (activePills.has('hasFeatureBet') && !featureBet) show = false;
+                if (activePills.has('unmeasured') && ui) show = false;
+                if (activePills.has('onlyStarred') && get('starred', i) !== 'true') show = false;
+                card.classList.toggle('hide', !show);
+                if (show) visibleCount++;
+            });
+            const total = cards.length;
+            const hasActive = q || activePills.size > 0;
+            const statusEl = document.getElementById('filterStatus');
+            if (statusEl) { statusEl.textContent = `Showing ${visibleCount} of ${total}`; statusEl.style.display = hasActive ? '' : 'none'; }
+            const clearBtn = document.getElementById('clearFiltersBtn');
+            if (clearBtn) clearBtn.style.display = hasActive ? '' : 'none';
+            const emptyEl = document.getElementById('emptyState');
+            if (emptyEl) emptyEl.style.display = visibleCount === 0 ? 'block' : 'none';
+            if (sortBy !== 'default') {
+                const visible = cards.filter(c => !c.classList.contains('hide'));
+                const key = (c) => {
+                    const i = c.dataset.index;
+                    if (sortBy === 'provider') return (document.getElementById(`provider-${i}`).value || '').toLowerCase();
+                    if (sortBy === 'reel-asc' || sortBy === 'reel-desc') { const ui = parseFloat(document.getElementById(`bottomUiHeight-${i}`).value) || 0; return ui ? (100 - (ui / SCREEN_HEIGHT) * 100) : -1; }
+                    if (sortBy === 'spin-desc') return parseFloat(document.getElementById(`spinSize-${i}`).value) || 0;
+                    return 0;
+                };
+                visible.sort((a, b) => { const ka = key(a), kb = key(b); if (typeof ka === 'string') return ka.localeCompare(kb); return sortBy === 'reel-desc' || sortBy === 'spin-desc' ? kb - ka : ka - kb; });
+                visible.forEach(c => gallery.appendChild(c));
+            } else {
+                cards.sort((a,b) => parseInt(a.dataset.index) - parseInt(b.dataset.index)).forEach(c => gallery.appendChild(c));
+            }
+            updateStats();
+        }
+
+        // ---------- Aggregate stats ----------
+        function median(xs) {
+            if (!xs.length) return null;
+            const s = xs.slice().sort((a,b) => a-b);
+            const m = Math.floor(s.length / 2);
+            return s.length % 2 ? s[m] : (s[m-1] + s[m]) / 2;
+        }
+        function mean(xs) { return xs.length ? xs.reduce((a,b)=>a+b,0)/xs.length : null; }
+
+        function updateStats() {
+            const visibleCards = Array.from(document.querySelectorAll('.card')).filter(c => !c.classList.contains('hide'));
+            const counted = visibleCards.filter(c => !document.getElementById(`ignore-${c.dataset.index}`).checked);
+            const N = counted.length;
+            const spinSizes = [], sideSizes = [], uiHeights = [];
+            let buyBonus = 0, featureBet = 0, starred = 0;
+            counted.forEach(c => {
+                const i = c.dataset.index;
+                const sp = parseFloat(document.getElementById(`spinSize-${i}`).value);
+                const sd = parseFloat(document.getElementById(`sideSize-${i}`).value);
+                const ui = parseFloat(document.getElementById(`bottomUiHeight-${i}`).value);
+                if (sp) spinSizes.push(sp);
+                if (sd) sideSizes.push(sd);
+                if (ui) uiHeights.push(ui);
+                if (document.getElementById(`buyBonus-${i}`).checked) buyBonus++;
+                if (document.getElementById(`featureBet-${i}`).checked) featureBet++;
+                if (get('starred', i) === 'true') starred++;
+            });
+            const reelPcts = uiHeights.map(h => 100 - (h/SCREEN_HEIGHT)*100);
+            const fmt = (v, suf='') => v == null ? '—' : v.toFixed(1) + suf;
+            const pct = (n) => N ? ((n/N)*100).toFixed(0) + '%' : '—';
+            const measured = uiHeights.length;
+            document.getElementById('stats').innerHTML = `
+                <div class="stat"><span class="v">${N}</span>games (visible, non-ignored)</div>
+                <div class="stat"><span class="v">${measured}/${N}</span>measured (UI height)</div>
+                <div class="stat"><span class="v">${fmt(median(spinSizes))}</span>median spin btn px</div>
+                <div class="stat"><span class="v">${fmt(median(sideSizes))}</span>median side btn px</div>
+                <div class="stat"><span class="v">${fmt(median(uiHeights))}</span>median UI height px</div>
+                <div class="stat"><span class="v">${fmt(median(reelPcts), '%')}</span>median reel-estate</div>
+                <div class="stat clickable" title="Click to filter" onclick="activateFilterPill('hasBuyBonus')"><span class="v">${pct(buyBonus)}</span>have Buy Bonus (${buyBonus}/${N})</div>
+                <div class="stat clickable" title="Click to filter" onclick="activateFilterPill('hasFeatureBet')"><span class="v">${pct(featureBet)}</span>have Bet+/Boost/Ante (${featureBet}/${N})</div>
+                <div class="stat clickable" title="Click to filter" onclick="activateFilterPill('onlyStarred')"><span class="v">${starred}</span>starred ★</div>
+            `;
+        }
+
+        // ---------- CSV export with proper escaping ----------
+        function csvEscape(v) {
+            const s = String(v ?? '');
+            if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+            return s;
+        }
+        function exportToCSV() {
+            const headers = ["Image File","Provider","Game Name","Spin Size","Side Size","UI Height","UI %","Reel Estate %","Bet+","Buy Bonus","Ignore","Starred","Comment"];
+            const rows = [headers.map(csvEscape).join(",")];
+            document.querySelectorAll('.card').forEach((card) => {
+                const i = card.dataset.index;
+                const file = card.dataset.file;
+                const r = rowData(i);
+                rows.push([file,r.provider,r.game,r.spin || '',r.side || '',r.ui || '',r.uiPct || '',r.reelPct || '',r.fb,r.bb,r.ignore,r.starred,r.comment].map(csvEscape).join(","));
+            });
+            downloadFile(rows.join("\n"), "game_measurements.csv", "text/csv");
+        }
+
+        // ---------- CSV import ----------
+        function parseCSV(text) {
+            const rows = [];
+            let row = [], cell = '', inQuotes = false;
+            for (let i = 0; i < text.length; i++) {
+                const c = text[i];
+                if (inQuotes) {
+                    if (c === '"' && text[i+1] === '"') { cell += '"'; i++; }
+                    else if (c === '"') inQuotes = false;
+                    else cell += c;
+                } else {
+                    if (c === '"') inQuotes = true;
+                    else if (c === ',') { row.push(cell); cell = ''; }
+                    else if (c === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+                    else if (c === '\r') { /* skip */ }
+                    else cell += c;
+                }
+            }
+            if (cell.length || row.length) { row.push(cell); rows.push(row); }
+            return rows;
+        }
+        function importCSV(event) {
+            const file = event.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const rows = parseCSV(e.target.result);
+                if (!rows.length) return alert('Empty CSV');
+                const headers = rows[0].map(h => h.trim());
+                const idx = (name) => headers.indexOf(name);
+                const map = { file: idx('Image File'), provider: idx('Provider'), game: idx('Game Name'), spin: idx('Spin Size'), side: idx('Side Size'), ui: idx('UI Height'), fb: idx('Bet+'), bb: idx('Buy Bonus'), ig: idx('Ignore'), starred: idx('Starred'), comment: idx('Comment') };
+                let n = 0;
+                for (let r = 1; r < rows.length; r++) {
+                    const row = rows[r]; if (!row || !row[map.file]) continue;
+                    const fname = row[map.file];
+                    const card = document.querySelector(`.card[data-file="${CSS.escape(fname)}"]`);
+                    if (!card) continue;
+                    const i = card.dataset.index;
+                    const setField = (id, value) => { const el = document.getElementById(`${id}-${i}`); if (el) el.value = value || ''; };
+                    if (map.provider >= 0) { setField('provider', row[map.provider]); set('provider', i, row[map.provider]); }
+                    if (map.game >= 0) { setField('game', row[map.game]); set('game', i, row[map.game]); }
+                    if (map.spin >= 0) { setField('spinSize', row[map.spin]); set('spinSize', i, row[map.spin]); }
+                    if (map.side >= 0) { setField('sideSize', row[map.side]); set('sideSize', i, row[map.side]); }
+                    if (map.ui >= 0) { setField('bottomUiHeight', row[map.ui]); set('bottomUiHeight', i, row[map.ui]); }
+                    if (map.fb >= 0) { const v = row[map.fb] === 'true'; document.getElementById(`featureBet-${i}`).checked = v; set('featureBet', i, v); }
+                    if (map.bb >= 0) { const v = row[map.bb] === 'true'; document.getElementById(`buyBonus-${i}`).checked = v; set('buyBonus', i, v); }
+                    if (map.ig >= 0) { const v = row[map.ig] === 'true'; document.getElementById(`ignore-${i}`).checked = v; set('ignore', i, v); document.querySelector(`.card[data-index="${i}"]`).classList.toggle('ignored', v); }
+                    if (map.starred >= 0) { const v = row[map.starred] === 'true'; set('starred', i, v); const sb = document.getElementById(`star-${i}`); if (sb) sb.classList.toggle('starred', v); const cs = document.getElementById(`cs-star-${i}`); if (cs) cs.style.display = v ? '' : 'none'; }
+                    if (map.comment >= 0) { const v = row[map.comment] || ''; setOrClear('comment', i, v); const cel = document.getElementById(`comment-${i}`); if (cel) cel.value = v; }
+                    recalc(i);
+                    n++;
+                }
+                alert(`Imported ${n} rows.`);
+                applyFilters();
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+
+        // ---------- JSON backup / restore ----------
+        function exportJSON() {
+            const dump = {};
+            files.forEach((_, i) => { FIELDS.forEach(f => { const v = get(f, i); if (v !== null) dump[`${f}-${i}`] = v; }); });
+            downloadFile(JSON.stringify(dump, null, 2), 'gallery_backup.json', 'application/json');
+        }
+        function importJSON(event) {
+            const file = event.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try { const data = JSON.parse(e.target.result); Object.entries(data).forEach(([k,v]) => localStorage.setItem(k, v)); alert('Restored. Reloading…'); location.reload(); }
+                catch (err) { alert('Invalid JSON: ' + err.message); }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+        function clearAll() {
+            if (!confirm('Clear all measurement data? Seed defaults will be re-shown.')) return;
+            files.forEach((_, i) => FIELDS.forEach(f => localStorage.removeItem(`${f}-${i}`)));
+            location.reload();
+        }
+        function downloadFile(content, name, mime) {
+            const blob = new Blob([content], { type: mime });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url; link.download = name;
+            document.body.appendChild(link); link.click();
+            document.body.removeChild(link); URL.revokeObjectURL(url);
+        }
+
+        const _sp = JSON.parse(localStorage.getItem('ksg_active_pills') || '[]');
+        _sp.forEach(f => { const p = document.querySelector(`.pill[data-filter="${f}"]`); if (p) p.classList.add('active'); });
+        const _st = localStorage.getItem('ksg_filter_text') || '';
+        if (_st) document.getElementById('filterText').value = _st;
+        if (_sp.length || _st) applyFilters(); else updateStats();
+    </script>
+</body>
+</html>
